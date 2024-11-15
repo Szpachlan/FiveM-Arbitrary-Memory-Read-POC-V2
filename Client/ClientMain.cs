@@ -33,7 +33,7 @@ namespace MyResource.Client
 	{
 		public ClientMain()
 		{
-			
+
 			string memStr = ReadAddr(0x28b82440000);
 			
 			Debug.WriteLine(string.Concat(new string[]
@@ -48,7 +48,14 @@ namespace MyResource.Client
 
 		public string ReadAddr(ulong address)
 		{
-			return Function.Call<string>(Hash.GET_CONVAR, address, address);
+			try
+			{
+				return ContextMemory.MemResult(address);
+			}
+			catch
+			{
+				return "\0"; // if address is invalid just return nul
+			}
 		}
 	}
 }
