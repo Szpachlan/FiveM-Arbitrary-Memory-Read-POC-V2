@@ -1,72 +1,149 @@
-# 🚀 FiveM-New-Arbitrary-Memory-Read-POC-V2
+# FiveM Arbitrary Memory Read PoC V2
 
-> **Warning:** This repository is for **educational and ethical hacking purposes only**. It demonstrates a new, cutting-edge method for exploiting memory vulnerabilities in FiveM. Unauthorized use is strictly prohibited.
+Small proof-of-concept demonstrating an arbitrary memory read primitive in the FiveM C# scripting environment through direct use of `ScriptContext`.
 
----
+## About
 
-## 📜 About
+I'm a co-founder of **[FiveGuard](https://fiveguard.net)**, a FiveM anti-cheat project focused on improving security across the platform.
 
-This repository is a groundbreaking collaboration between 3 SIGMA projects **[FiveGuard](https://fiveguard.net)**, **[JustScripts](https://justscripts.net)**, and **[KingMaps](https://kingmaps.net)**. We’re dedicated to uncovering, demonstrating, and ultimately mitigating security vulnerabilities in the FiveM ecosystem.
+A lot of this research comes from looking into FiveM internals, runtime behavior, and security boundaries while working on FiveGuard. The goal is not only to improve our own anti-cheat, but also to help make the FiveM ecosystem more secure overall.
 
-By responsibly releasing this Proof of Concept (POC), we aim to provide a resource for developers, server owners, and security researchers to better understand and secure their environments.
+## How it works
 
----
+Instead of using the normal FiveM native invocation path:
 
-## 🌟 Featured Products
+```csharp
+Function.Call<T>()
+```
 
-**🔒 [FiveGuard.net](https://fiveguard.net)**
-- The ultimate FiveM anti-cheat solution.
-- Real-time Aimbot detection providing [videos](https://www.youtube.com/watch?v=l1W-o2nvj5E) in your logs.
-- Enhanced optimization best for your server.
-- Advanced Cheats ai detection detecting MAJORITY of cheats.  
+the PoC interacts directly with:
 
-**🏠 [KingMaps.net](https://kingmaps.net)**
-- The leader in custom FiveM MLO.
-- Gorgeous, immersive MLO tailored for RP and action servers such as [Ammunation](https://www.youtube.com/watch?v=dPRumPktBtU).
-- Regular updates mades by the best always new interiors added to our [Monthly Subscription](https://kingmaps.net/subscriptions).
+```csharp
+ScriptContext
+```
 
-**💻 [JustScripts.net](https://justscripts.net)**
-- Premium FiveM scripts for both RP and fun servers.
-- Optimized, customizable, and easy-to-integrate solutions supporting ESX, QBCORE, VRP.
-- Create unique experiences with cutting-edge scripts for jobs, UI, and more.
-- Elevate your server’s gameplay without compromising on performance.
+The core idea is:
 
-> 🎉 **Special Offer:** Join our [Giveaway Discord](https://discord.gg/fivegift) and have a chance to win these products for **FREE**
+```csharp
+ScriptContext.Reset();
+ScriptContext.Push(address);
 
----
+return ScriptContext.GetResult<string>();
+```
 
-## 🛠 Features of This Repo
+A controlled address is pushed into the context and then interpreted by:
 
-- 🧠 Arbitrary memory access using a **brand-new exploit technique**.
-- ⚡ Demonstrates critical vulnerabilities to promote stronger defenses.
+```csharp
+ScriptContext.GetResult<string>()
+```
 
----
+as a string pointer.
 
-## 📢 Why Choose Us?
+In simplified form:
 
-Our team isn’t just about revealing vulnerabilities; we actively **create solutions** to secure and upgrade the FiveM ecosystem. With **[FiveGuard](https://fiveguard.net)**, **[JustScripts](https://justscripts.net)**, and **[KingMaps](https://kingmaps.net)**, we’ve built a powerhouse of tools for server owners, developers, and players. Whether you want to **protect your server**, **enhance gameplay**, or **redefine your MLO experience**, we’ve got you covered.
+```text
+memory address
+    ↓
+ScriptContext.Push(address)
+    ↓
+GetResult<string>()
+    ↓
+address interpreted as string pointer
+    ↓
+string returned to C#
+```
 
----
+No GTA native call is required.
 
-## ⚠️ Disclaimer
+## Example
 
-- This repository is a **proof of concept** and must be used ethically and legally.
-- We **do not condone misuse** of this information.
-- By cloning or using this repository, you accept all responsibility for your actions.
+```csharp
+public static string ReadAddr(ulong address)
+{
+    try
+    {
+        ScriptContext.Reset();
+        ScriptContext.Push(address);
 
----
+        return ScriptContext.GetResult<string>();
+    }
+    catch
+    {
+        return null;
+    }
+}
+```
 
-## 🔗 Connect With Us
+Usage:
 
-Explore our cutting-edge products and services:
+```csharp
+string value = ReadAddr(0x28B82440000);
+```
 
-- 🛡 **[FiveGuard](https://fiveguard.net):** Anti-cheat solutions for FiveM servers.
-- 💻 **[JustScripts](https://justscripts.net):** Premium scripts for all server types.
-- 🗺 **[KingMaps](https://kingmaps.net):** High-quality custom FiveM maps.
+If the address points to a readable string, the string is returned normally.
 
-Stay ahead of the game. Innovate. Enhance. Protect.  
-*Crafted by the leaders in FiveM development.*
+## Invalid Addresses
 
----
+Invalid memory addresses do not crash the FiveM process in this case.
 
-**⚡ Let’s redefine FiveM together. Built by the best, for the best.**  
+`GetResult<string>()` throws an error which can be handled with a normal `try/catch`.
+
+```text
+valid address
+    ↓
+string returned
+
+invalid address
+    ↓
+exception thrown
+    ↓
+caught by C#
+```
+
+## Why this is interesting
+
+FiveM's normal higher-level native invocation API contains additional validation and sanitization around native calls and results.
+
+This PoC bypasses that higher-level path entirely and directly manipulates the underlying `ScriptContext`.
+
+The interesting part is not a specific GTA native, but the fact that a raw context value can be interpreted directly as a managed string pointer.
+
+## Root Cause
+
+```text
+controlled ulong
+    ↓
+ScriptContext storage
+    ↓
+GetResult<string>()
+    ↓
+value interpreted as native string pointer
+    ↓
+arbitrary string memory read
+```
+
+This creates a straightforward arbitrary string memory read primitive from managed C#.
+
+## Scope
+
+Tested with:
+
+```text
+FiveM
+C#
+Mono runtime
+ScriptContext
+```
+
+Behavior may differ between runtime versions.
+
+## Disclaimer
+
+This repository is provided for:
+
+* security research
+* FiveM runtime analysis
+* educational purposes
+* vulnerability documentation
+
+Only test against environments you own or have explicit permission to research.
